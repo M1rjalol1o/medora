@@ -1,0 +1,6 @@
+{
+  "appId": "uz.medora.app",
+  "appName": "Medora",
+  "webDir": ".",
+  "server": { "androidScheme": "https" }
+}
