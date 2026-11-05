@@ -30,10 +30,25 @@ class PrescriptionItem(models.Model):
     confidence = models.FloatField(default=0)
 
 
+class FamilyMember(models.Model):
+    """Oila a'zosi: ota-ona, farzand — ular uchun alohida dori jadvali."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="family")
+    name = models.CharField(max_length=60)
+    relation = models.CharField(max_length=30, blank=True)          # ona, ota, farzand...
+    color = models.CharField(max_length=9, default="#FF8A65")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+
 class MedicationCourse(models.Model):
     """Dori qabul qilish jadvali (budilnik)."""
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="courses")
+    # Bo'sh bo'lsa — foydalanuvchining o'zi uchun
+    member = models.ForeignKey(FamilyMember, null=True, blank=True, on_delete=models.CASCADE, related_name="courses")
     prescription_item = models.ForeignKey(PrescriptionItem, null=True, blank=True, on_delete=models.SET_NULL)
     medicine_name = models.CharField(max_length=200)
     dose = models.CharField(max_length=60, blank=True)

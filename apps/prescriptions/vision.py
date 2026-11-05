@@ -122,7 +122,7 @@ def openrouter(image_b64: str) -> dict:
         ]}],
     }
     r = _post("https://openrouter.ai/api/v1/chat/completions", payload,
-              {"Authorization": f"Bearer {key}", "X-Title": "Medora"})
+              {"Authorization": f"Bearer {key}", "X-Title": "Malhamix"})
     try:
         text = r["choices"][0]["message"]["content"]
     except (KeyError, IndexError):

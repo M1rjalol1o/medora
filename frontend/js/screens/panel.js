@@ -1,7 +1,7 @@
 // Dorixona paneli: bosh sahifa, buyurtmalar + bronlar, ombor + muddati yaqin dorilar
 import { api, auth } from "../api.js";
-import { st, t } from "../i18n.js";
-import { closeSheet, countdown, dt, esc, sheet, som, toast } from "../ui.js";
+import { currentLang, st, t } from "../i18n.js";
+import { closeSheet, countdown, dt, esc, icons, sheet, som, toast } from "../ui.js";
 
 const stockoutText = (h) => {
   if (h === null || h === undefined) return t("sotuv yo'q");
@@ -19,19 +19,32 @@ const header = (title) => `<header class="topbar"><div><h1>${t(title)}</h1><div 
 // ================= BOSH SAHIFA =================
 export const dashboard = {
   render(root, { go }) {
-    root.innerHTML = `${header("Bosh sahifa")}<div class="screen" id="c"><div class="spinner"></div></div>`;
+    root.innerHTML = `<div class="screen flush"><div class="hero"><div class="sub">${esc(auth.user?.pharmacy_name || "")}</div>
+        <div class="small mt8" style="opacity:.85">${t("Bugungi daromad")}</div><div id="rev" style="font-size:32px;font-weight:800;letter-spacing:-1px">…</div>
+        <div id="chg" class="small"></div></div><div class="pad mt16" id="c"><div class="skeleton"></div></div></div>`;
     const c = root.querySelector("#c");
     async function load() {
       try {
         const d = await api("/panel/dashboard/");
+        root.querySelector("#rev").textContent = som(d.revenue_today);
+        root.querySelector("#chg").innerHTML = d.revenue_change === null ? "" :
+          `<span class="points-pill">${d.revenue_change >= 0 ? "▲" : "▼"} ${Math.abs(d.revenue_change)}%</span> <span style="opacity:.85">${t("kechagi shu vaqtga nisbatan")}</span>`;
+        const maxW = Math.max(1, ...d.week.map((w) => w.revenue));
+        const wd = (iso) => new Date(iso).toLocaleDateString(currentLang() === "en" ? "en-GB" : currentLang() === "ru" ? "ru-RU" : "uz-UZ", { weekday: "short" }).slice(0, 2);
         c.innerHTML = `
+          <div class="card"><div class="row"><b>${t("Haftalik sotuv")}</b><span class="tiny muted">${som(d.week.reduce((a, w) => a + w.revenue, 0))}</span></div>
+            <div class="bar-chart mt12">${d.week.map((w, i) => `<div class="b ${i === 6 ? "today" : ""}"><i style="height:${Math.max(3, (w.revenue / maxW) * 100)}%"></i><span>${wd(w.date)}</span></div>`).join("")}</div></div>
+          ${d.demand.length ? `<div class="card violet"><div class="row"><b>🔎 ${t("Bugun mijozlar qidirdi")}</b><span class="chip violet">${d.searches_today} ${t("qidiruv")}</span></div>
+            ${d.demand.map((x) => `<div class="list-row"><div class="small"><b>${esc(x.name)}</b> <span class="muted">· ${t("{n} marta", { n: x.searches })}</span></div>
+              ${x.level === "out" || x.level === "none" ? `<span class="chip danger">${t("Bizda yo'q")}</span>` : x.level === "low" ? `<span class="chip warn">${t("{n} dona", { n: x.quantity })}</span>` : `<span class="chip ok">${t("{n} dona", { n: x.quantity })}</span>`}</div>`).join("")}
+            <div class="tiny muted mt8">${t("Talab bor, lekin qoldiq yo'q — bu yo'qotilgan savdo. Omborni to'ldiring.")}</div></div>` : ""}
           <div class="stat-grid">
-            <div class="stat" data-go="orders"><div class="v" style="color:var(--primary)">${d.new_orders}</div><div class="k">${t("Yangi buyurtmalar")}</div></div>
-            <div class="stat" data-go="orders"><div class="v" style="color:var(--primary)">${d.active_reservations}</div><div class="k">${t("Faol bronlar")}</div></div>
-            <div class="stat" data-go="inventory"><div class="v" style="color:var(--warn)">${d.low_stock}</div><div class="k">${t("Kam qolgan")}</div></div>
-            <div class="stat" data-go="inventory"><div class="v" style="color:var(--danger)">${d.out_of_stock}</div><div class="k">${t("Tugagan")}</div></div>
-            <div class="stat" data-go="expiring"><div class="v" style="color:var(--danger)">${d.expiring}</div><div class="k">${t("Muddati yaqin")}</div></div>
-            <div class="stat"><div class="v">${d.sold_today}</div><div class="k">${t("Bugun sotildi (dona)")}</div></div>
+            <div class="stat" data-go="orders"><div class="ic tone-mint">${icons.bag}</div><div class="v">${d.new_orders}</div><div class="k">${t("Yangi buyurtmalar")}</div></div>
+            <div class="stat" data-go="orders"><div class="ic tone-violet">${icons.ticket}</div><div class="v">${d.active_reservations}</div><div class="k">${t("Faol bronlar")}</div></div>
+            <div class="stat" data-go="inventory"><div class="ic tone-amber">${icons.box}</div><div class="v">${d.low_stock}</div><div class="k">${t("Kam qolgan")}</div></div>
+            <div class="stat" data-go="inventory"><div class="ic tone-coral">${icons.box}</div><div class="v">${d.out_of_stock}</div><div class="k">${t("Tugagan")}</div></div>
+            <div class="stat" data-go="expiring"><div class="ic tone-coral">${icons.clock}</div><div class="v">${d.expiring}</div><div class="k">${t("Muddati yaqin")}</div></div>
+            <div class="stat"><div class="ic tone-mint">${icons.chart}</div><div class="v">${d.sold_today}</div><div class="k">${t("Bugun sotildi (dona)")}</div></div>
           </div>
           <div class="section-title">${t("AI ogohlantirishlar — buyurtma bering")}</div>
           ${d.alerts.length ? d.alerts.map((r) => `

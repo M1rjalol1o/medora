@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from apps.accounts.i18n import msg
 from apps.catalog.models import Medicine
 
-from .models import IntakeLog, MedicationCourse, Prescription, PrescriptionItem
+from .models import FamilyMember, IntakeLog, MedicationCourse, Prescription, PrescriptionItem
 from .ocr import read_prescription
 from .parser import _catalog, _find_medicine, default_times, parse
 
@@ -115,7 +115,7 @@ def prescription_confirm(request, pk):
         c = MedicationCourse.objects.create(
             user=request.user, medicine_name=str(it.get("name", ""))[:200], dose=str(it.get("dose", ""))[:60],
             times=sorted(set(times)), start_date=today, end_date=today + timedelta(days=days - 1),
-            note=str(it.get("note", ""))[:200])
+            note=str(it.get("note", ""))[:200], member=_member_or_none(request, request.data.get("member")))
         created.append(course_dict(c))
     p.status = Prescription.Status.CONFIRMED
     p.save(update_fields=["status"])
@@ -123,9 +123,77 @@ def prescription_confirm(request, pk):
 
 
 def course_dict(c, today_logs=None):
+    today = timezone.localdate()
     return {"id": c.id, "medicine_name": c.medicine_name, "dose": c.dose, "times": c.times,
             "start_date": c.start_date, "end_date": c.end_date, "note": c.note, "is_active": c.is_active,
+            "member": c.member_id, "days_left": (c.end_date - today).days + 1,
             "taken_today": today_logs if today_logs is not None else []}
+
+
+def member_dict(m):
+    return {"id": m.id, "name": m.name, "relation": m.relation, "color": m.color}
+
+
+def adherence(courses, days=7):
+    """Oxirgi `days` kunda (bugungacha) rejalashtirilgan qabullarning necha foizi ichilgan."""
+    today = timezone.localdate() - timedelta(days=1)
+    planned = taken = 0
+    for c in courses:
+        start = max(c.start_date, today - timedelta(days=days - 1))
+        end = min(c.end_date, today)
+        n_days = (end - start).days + 1
+        if n_days <= 0:
+            continue
+        planned += n_days * len(c.times)
+        taken += c.logs.filter(date__gte=start, date__lte=end, status="taken").count()
+    return {"planned": planned, "taken": taken, "percent": round(taken * 100 / planned) if planned else None}
+
+
+def _member_or_none(request, value):
+    if value in (None, "", "me", 0, "0"):
+        return None
+    return get_object_or_404(FamilyMember, pk=value, user=request.user)
+
+
+@S
+@api_view(["GET", "POST"])
+@permission_classes([permissions.IsAuthenticated])
+def family(request):
+    """Oila a'zolari. POST {name, relation, color}"""
+    if request.method == "POST":
+        name = str(request.data.get("name", "")).strip()[:60]
+        if not name:
+            return Response({"detail": msg(request, "bad_value", f="name")}, status=400)
+        m = FamilyMember.objects.create(user=request.user, name=name,
+                                        relation=str(request.data.get("relation", ""))[:30],
+                                        color=str(request.data.get("color") or "#FF8A65")[:9])
+        return Response(member_dict(m), status=201)
+    return Response([member_dict(m) for m in request.user.family.all()])
+
+
+@S
+@api_view(["DELETE"])
+@permission_classes([permissions.IsAuthenticated])
+def family_detail(request, pk):
+    get_object_or_404(FamilyMember, pk=pk, user=request.user).delete()
+    return Response(status=204)
+
+
+@S
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def health_stats(request):
+    """Har bir a'zo uchun 7 kunlik intizom foizi + tugayotgan kurslar (qayta buyurtma taklifi)."""
+    today = timezone.localdate()
+    active = request.user.courses.filter(is_active=True, end_date__gte=today).prefetch_related("logs")
+    people = [{"id": None, "name": request.user.first_name or request.user.username, "relation": "me",
+               "color": "#0FB389"}] + [member_dict(m) for m in request.user.family.all()]
+    for p in people:
+        mine = [c for c in active if c.member_id == p["id"]]
+        p["active_courses"] = len(mine)
+        p["adherence"] = adherence(mine)
+    ending = [course_dict(c) for c in active if (c.end_date - today).days <= 1]
+    return Response({"people": people, "ending_soon": ending, "adherence": adherence(list(active))})
 
 
 @S
@@ -143,10 +211,14 @@ def courses(request):
         c = MedicationCourse.objects.create(user=request.user, medicine_name=d["medicine_name"][:200],
                                             dose=str(d.get("dose", ""))[:60], times=sorted(set(times)),
                                             start_date=today, end_date=today + timedelta(days=days - 1),
-                                            note=str(d.get("note", ""))[:200])
+                                            note=str(d.get("note", ""))[:200],
+                                            member=_member_or_none(request, d.get("member")))
         return Response(course_dict(c), status=201)
     today = timezone.localdate()
     qs = request.user.courses.filter(is_active=True, end_date__gte=today)
+    if "member" in request.GET:
+        m = request.GET["member"]
+        qs = qs.filter(member__isnull=True) if m in ("", "me", "0") else qs.filter(member_id=m)
     logs = {}
     for l in IntakeLog.objects.filter(course__in=qs, date=today):
         logs.setdefault(l.course_id, []).append({"time": l.time, "status": l.status})

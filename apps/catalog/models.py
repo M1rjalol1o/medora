@@ -25,3 +25,10 @@ class Medicine(models.Model):
         from .utils import normalize
         self.search_text = normalize(" ".join([self.name, self.inn, self.aliases]))
         super().save(*args, **kwargs)
+
+
+class SearchLog(models.Model):
+    """Qaysi dori qachon qidirilgan — dorixonalarga talab statistikasi uchun."""
+
+    medicine = models.ForeignKey(Medicine, on_delete=models.CASCADE, related_name="searches")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)

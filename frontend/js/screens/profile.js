@@ -36,7 +36,7 @@ export function render(root, { logout }) {
       <div class="btn-row"><button class="btn secondary" id="notif">🔔 ${t("Bildirishnomaga ruxsat")}</button><button class="btn secondary" id="test">▶ ${t("Sinab ko'rish")}</button></div>` : ""}
 
       <button class="btn danger mt16" id="out">${t("Chiqish")}</button>
-      <div class="tiny muted mt16" style="text-align:center">Medora v1.0 · ${t("demo ma'lumotlar")}</div>
+      <div class="tiny muted mt16" style="text-align:center">Malhamix v1.0 · ${t("demo ma'lumotlar")}</div>
     </div>`;
 
   root.querySelector("#out").onclick = logout;

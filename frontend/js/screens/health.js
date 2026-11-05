@@ -2,13 +2,15 @@
 import { api } from "../api.js";
 import { reloadCourses, testAlarm } from "../alarm.js";
 import { t } from "../i18n.js";
-import { closeSheet, esc, sheet, toast } from "../ui.js";
+import { closeSheet, esc, icons, initials, ring, sheet, toast } from "../ui.js";
 
 const DEFAULT_TIMES = { 1: ["09:00"], 2: ["09:00", "21:00"], 3: ["08:00", "14:00", "20:00"], 4: ["08:00", "12:00", "16:00", "20:00"] };
-const state = { tab: "schedule", rx: null };
+const state = { tab: "schedule", rx: null, member: "me" };
+const COLORS = ["#FF8A65", "#7C5CFF", "#2F80ED", "#F5A524", "#E2443D", "#0A7C92"];
 
 export function render(root, { params, go }) {
   if (params?.upload) state.tab = "rx";
+  if (params?.rx) { state.tab = "rx"; state.rx = params.rx; }
   root.innerHTML = `<header class="topbar"><div><h1>${t("Salomatlik")}</h1><div class="sub">${t("Retsept va dori ichish vaqtlari")}</div></div></header>
     <div class="screen"><div class="seg" id="seg"><button data-v="schedule">⏰ ${t("Jadval")}</button><button data-v="rx">📄 ${t("Retseptlar")}</button></div>
     <div id="c" class="mt12"></div></div>`;
@@ -22,8 +24,13 @@ export function render(root, { params, go }) {
   // ================= JADVAL =================
   async function loadSchedule() {
     c.innerHTML = `<div class="spinner"></div>`;
-    let courses = [];
-    try { courses = await api("/courses/"); } catch (e) { c.innerHTML = esc(e.message); return; }
+    let courses = [], stats = null;
+    try {
+      [courses, stats] = await Promise.all([api("/courses/", { query: { member: state.member } }), api("/health/stats/")]);
+    } catch (e) { c.innerHTML = esc(e.message); return; }
+    const pid = (p) => (p.id === null ? "me" : String(p.id));
+    const me = stats.people.find((p) => pid(p) === String(state.member)) || stats.people[0];
+    const adh = me.adherence.percent;
     const now = new Date();
     const nowS = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
     const doses = [];
@@ -34,7 +41,19 @@ export function render(root, { params, go }) {
     doses.sort((a, b) => a.time.localeCompare(b.time));
     const next = doses.find((d) => !d.status && d.time >= nowS);
 
+    const ending = stats.ending_soon.filter((k) => String(k.member ?? "me") === String(state.member));
     c.innerHTML = `
+      <div class="people">${stats.people.map((p) => `<button class="person ${pid(p) === String(state.member) ? "on" : ""}" data-person="${pid(p)}">
+          <span class="av" style="background:${esc(p.color)}">${esc(initials(p.name))}</span>${p.relation === "me" ? t("Men") : esc(p.name)}</button>`).join("")}
+        <button class="person" id="addPerson"><span class="av add">+</span>${t("Qo'shish")}</button></div>
+      <div class="card grad mt8"><div class="row">
+        <div class="grow"><div class="small" style="opacity:.85">${t("Haftalik intizom")}</div>
+          <div class="big mt4">${adh === null ? "—" : adh + "%"}</div>
+          <div class="tiny" style="opacity:.85">${t("{a} / {b} qabul o'z vaqtida", { a: me.adherence.taken, b: me.adherence.planned })}</div></div>
+        <div class="ring lg" style="background:conic-gradient(#fff ${(adh || 0) * 3.6}deg, rgba(255,255,255,.25) 0)"><span style="background:#0C958C;color:#fff">${adh >= 80 ? "🔥" : "💊"}</span></div></div></div>
+      ${ending.map((k) => `<div class="card violet"><div class="row"><div class="grow"><div class="bold small">💊 ${t("{name} tugayapti", { name: esc(k.medicine_name) })}</div>
+          <div class="tiny muted">${t("Kurs {n} kundan keyin tugaydi. Davom ettirish kerakmi?", { n: k.days_left })}</div></div>
+          <button class="btn sm violet" data-reorder="${esc(k.medicine_name)}">${t("Buyurtma")}</button></div></div>`).join("")}
       ${next ? `<div class="card recommended"><div class="tiny muted">${t("Keyingi qabul")}</div>
         <div class="row mt8"><div><div class="bold" style="font-size:24px">${esc(next.time)}</div>
         <div class="small">${esc(next.k.medicine_name)} ${esc(next.k.dose)}</div></div><div style="font-size:34px">⏰</div></div></div>` : ""}
@@ -64,7 +83,34 @@ export function render(root, { params, go }) {
     }));
     c.querySelectorAll("[data-edit]").forEach((b) => (b.onclick = () => editCourse(courses.find((k) => k.id == b.dataset.edit))));
     c.querySelector("#add").onclick = () => editCourse(null);
+    c.querySelectorAll("[data-person]").forEach((b) => (b.onclick = () => { state.member = b.dataset.person; loadSchedule(); }));
+    c.querySelector("#addPerson").onclick = addPerson;
+    c.querySelectorAll("[data-reorder]").forEach((b) => (b.onclick = async () => {
+      const name = b.dataset.reorder.split(/\s\d/)[0];
+      try {
+        const meds = await api("/medicines/", { query: { q: name } });
+        if (!meds.length) return toast(t("Topilmadi. Boshqacha yozib ko'ring."));
+        go("search", { basket: [{ medicine: meds[0], quantity: 1 }] });
+      } catch (e) { toast(e.message); }
+    }));
     c.querySelector("#test").onclick = () => testAlarm();
+  }
+
+  function addPerson() {
+    let color = COLORS[0];
+    const sh = sheet(`<div class="bold" style="font-size:20px">${t("Oila a'zosini qo'shish")}</div>
+      <div class="tiny muted mt8">${t("Ota-onangiz yoki farzandingiz dorilarini ham shu yerdan kuzating.")}</div>
+      <label class="lbl">${t("Ismi")}</label><input class="input" id="pn" placeholder="${t("Onam")}">
+      <label class="lbl">${t("Kim bo'ladi")}</label><input class="input" id="pr" placeholder="${t("ona, ota, farzand...")}">
+      <label class="lbl">${t("Rang")}</label><div class="row start" id="pc" style="gap:10px">${COLORS.map((x) => `<button data-c="${x}" class="av" style="width:34px;height:34px;background:${x};border:3px solid ${x === color ? "var(--text)" : "transparent"};cursor:pointer"></button>`).join("")}</div>
+      <button class="btn mt16" id="ps">${t("Saqlash")}</button>`);
+    sh.querySelectorAll("[data-c]").forEach((b) => (b.onclick = () => { color = b.dataset.c; sh.querySelectorAll("[data-c]").forEach((x) => (x.style.borderColor = x.dataset.c === color ? "var(--text)" : "transparent")); }));
+    sh.querySelector("#ps").onclick = async () => {
+      try {
+        const m = await api("/family/", { method: "POST", body: { name: sh.querySelector("#pn").value, relation: sh.querySelector("#pr").value, color } });
+        closeSheet(); state.member = String(m.id); loadSchedule();
+      } catch (e) { toast(e.message); }
+    };
   }
 
   function timesEditor(times) {
@@ -95,7 +141,7 @@ export function render(root, { params, go }) {
       const body = { medicine_name: sh.querySelector("#nm").value, dose: sh.querySelector("#ds").value, note: sh.querySelector("#nt").value, times };
       try {
         if (k) await api(`/courses/${k.id}/`, { method: "PATCH", body });
-        else await api("/courses/", { method: "POST", body: { ...body, duration_days: sh.querySelector("#dur").value } });
+        else await api("/courses/", { method: "POST", body: { ...body, duration_days: sh.querySelector("#dur").value, member: state.member } });
         closeSheet(); toast(t("Saqlandi ✓")); reloadCourses(); loadSchedule();
       } catch (e) { toast(e.message); }
     };
@@ -108,21 +154,15 @@ export function render(root, { params, go }) {
   async function loadRxList() {
     c.innerHTML = `
       <div class="card" style="text-align:center">
-        <div style="font-size:40px">📷</div>
+        <div class="qi" style="box-shadow:none;background:none"><div class="ic tone-mint" style="width:64px;height:64px;border-radius:20px">${icons.scan}</div></div>
         <div class="bold">${t("Retseptni suratga oling")}</div>
         <div class="small muted mt8">${t("AI dori nomi, doza, necha mahal va necha kun ichishni ajratib beradi. Siz tekshirib tasdiqlaysiz.")}</div>
-        <label class="btn mt12" style="cursor:pointer">${t("Rasm yuklash")}<input type="file" id="file" accept="image/*" capture="environment" hidden></label>
+        <button class="btn mt12" id="toScan">${icons.camera} ${t("AI skanerni ochish")}</button>
         <button class="btn secondary mt8" id="manual">✍️ ${t("Matn bilan kiritish")}</button>
       </div>
       <div class="hint tiny">${t("AI tibbiy maslahat bermaydi — faqat retseptda yozilganini o'qiydi. Noaniq joylarni albatta tekshiring yoki farmatsevtdan so'rang.")}</div>
       <div class="section-title">${t("Mening retseptlarim")}</div><div id="list"><div class="spinner"></div></div>`;
-    c.querySelector("#file").onchange = async (e) => {
-      const f = e.target.files[0]; if (!f) return;
-      const fd = new FormData(); fd.append("image", f);
-      c.querySelector("#list").innerHTML = `<div class="spinner"></div><div class="small muted" style="text-align:center">${t("Retsept o'qilmoqda...")}</div>`;
-      try { state.rx = await api("/prescriptions/", { method: "POST", form: fd }); drawRx(state.rx); }
-      catch (err) { toast(err.message); loadRxList(); }
-    };
+    c.querySelector("#toScan").onclick = () => go("scan");
     c.querySelector("#manual").onclick = () => {
       const sh = sheet(`<div class="bold" style="font-size:20px">${t("Retsept matni")}</div>
         <div class="tiny muted mt8">${t("Har bir dori alohida qatorda. Masalan:")}<br><i>Paratsetamol 500 mg kuniga 3 mahal 5 kun</i></div>
@@ -187,7 +227,7 @@ export function render(root, { params, go }) {
     c.querySelectorAll("[data-rm]").forEach((b) => (b.onclick = () => { rx.items.splice(Number(b.dataset.rm), 1); drawRx(rx); }));
     c.querySelector("#confirm")?.addEventListener("click", async () => {
       try {
-        await api(`/prescriptions/${rx.id}/confirm/`, { method: "POST", body: { items } });
+        await api(`/prescriptions/${rx.id}/confirm/`, { method: "POST", body: { items, member: state.member } });
         if ("Notification" in window && Notification.permission === "default") Notification.requestPermission();
         toast(t("Jadvalga qo'shildi ✓ Vaqti kelganda eslatamiz"));
         state.rx = null; state.tab = "schedule"; segs(); reloadCourses(); loadSchedule();

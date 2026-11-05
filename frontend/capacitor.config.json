@@ -1,6 +1,6 @@
 {
-  "appId": "uz.medora.app",
-  "appName": "Medora",
+  "appId": "uz.malhamix.app",
+  "appName": "Malhamix",
   "webDir": ".",
   "server": { "androidScheme": "https" }
 }

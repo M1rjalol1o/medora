@@ -34,6 +34,8 @@ class Order(models.Model):
     items_total = models.PositiveIntegerField(default=0)
     delivery_fee = models.PositiveIntegerField(default=0)
     total = models.PositiveIntegerField(default=0)
+    points_used = models.PositiveIntegerField(default=0)            # ballar bilan to'langan qism
+    points_earned = models.PositiveIntegerField(default=0)          # yakunlanganda qo'shilgan keshbek
     delivery_code = models.CharField(max_length=4, blank=True)       # mijoz haydovchiga aytadi
     prescription = models.ForeignKey("prescriptions.Prescription", null=True, blank=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(auto_now_add=True)

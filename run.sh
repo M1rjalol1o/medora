@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Medora — Linux/macOS uchun ishga tushirish
+# Malhamix — Linux/macOS uchun ishga tushirish
 set -e
 cd "$(dirname "$0")"
 [ -d .venv ] || python3 -m venv .venv

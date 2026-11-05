@@ -5,7 +5,7 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from apps.catalog.models import Medicine
+from apps.catalog.models import Medicine, SearchLog
 from apps.catalog.utils import normalize
 from apps.pharmacies.models import Inventory
 from apps.reservations.models import Reservation, hold_minutes_for
@@ -93,7 +93,31 @@ def medicine_offers(request, medicine_id: int):
         })
 
     ranked = rank_offers(offers, mode, travel)
-    return Response({"medicine": _medicine_dict(medicine), "mode": mode, "travel": travel, "offers": ranked})
+    SearchLog.objects.create(medicine=medicine)
+    in_stock = [o["price"] for o in offers if o["available"] > 0]
+    return Response({"medicine": _medicine_dict(medicine), "mode": mode, "travel": travel, "offers": ranked,
+                     "alternatives": alternatives_for(medicine, min(in_stock) if in_stock else None),
+                     "watching": request.user.is_authenticated and medicine.watches.filter(
+                         user=request.user, notified_at__isnull=True).exists()})
+
+
+def alternatives_for(medicine, own_min_price):
+    """Bir xil ta'sir qiluvchi modda (MNN) va shakldagi boshqa dorilar — arzonroq muqobil."""
+    if not medicine.inn:
+        return []
+    others = Medicine.objects.filter(inn__iexact=medicine.inn.strip()).exclude(pk=medicine.pk)
+    out = []
+    for m in others:
+        prices = [i.final_price for i in Inventory.objects.filter(medicine=m, pharmacy__is_active=True, quantity__gt=0)
+                  if i.available_quantity > 0]
+        if not prices:
+            continue
+        p = min(prices)
+        saving = round((own_min_price - p) * 100 / own_min_price) if own_min_price else None
+        out.append({"medicine": _medicine_dict(m), "min_price": p, "pharmacies": len(prices),
+                    "saving_percent": saving, "cheaper": own_min_price is None or p < own_min_price})
+    out.sort(key=lambda a: a["min_price"])
+    return out
 
 
 @extend_schema(request=OpenApiTypes.OBJECT, responses=OpenApiTypes.OBJECT)

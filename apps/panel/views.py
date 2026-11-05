@@ -76,8 +76,39 @@ def dashboard(request):
         order__status__in=["awaiting_payment", "cancelled"]).count()
     expiring = sum(1 for r in rows if r["days_to_expiry"] is not None and r["days_to_expiry"] <= dj.EXPIRING_SOON_DAYS
                    and r["quantity"] > 0)
+    # Daromad: sotuv tarixi x joriy narx; 7 kunlik grafik
+    from datetime import timedelta
+
+    from django.db.models import Count, Sum
+
+    from apps.catalog.models import SearchLog
+    price = {i.medicine_id: i.final_price for i in Inventory.objects.filter(pharmacy=ph)}
+    week = []
+    for k in range(6, -1, -1):
+        d = today - timedelta(days=k)
+        agg = SaleRecord.objects.filter(pharmacy=ph, date=d).values("medicine_id").annotate(q=Sum("quantity"))
+        week.append({"date": d, "revenue": sum(price.get(a["medicine_id"], 0) * a["q"] for a in agg),
+                     "sold": sum(a["q"] for a in agg)})
+    rev_today = week[-1]["revenue"]
+    # Kecha xuddi shu soatgacha bo'lgan daromad bilan solishtiramiz (adolatli taqqoslash)
+    agg = SaleRecord.objects.filter(pharmacy=ph, date=today - timedelta(days=1),
+                                    hour__lt=max(1, timezone.localtime().hour)).values("medicine_id").annotate(q=Sum("quantity"))
+    rev_yday = sum(price.get(a["medicine_id"], 0) * a["q"] for a in agg)
+    # Talab: bugun qaysi dorilar qidirildi va bizda kam/yo'q
+    level = {r["medicine"]["id"]: r for r in rows}
+    start = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
+    demand = []
+    for s in (SearchLog.objects.filter(created_at__gte=start).values("medicine_id", "medicine__name")
+              .annotate(n=Count("id")).order_by("-n")[:6]):
+        r = level.get(s["medicine_id"])
+        demand.append({"medicine_id": s["medicine_id"], "name": s["medicine__name"], "searches": s["n"],
+                       "quantity": r["quantity"] if r else 0, "level": r["level"] if r else "none"})
     return Response({
         "pharmacy": {"id": ph.id, "name": ph.name, "address": ph.address},
+        "revenue_today": rev_today, "revenue_yesterday": rev_yday,
+        "revenue_change": round((rev_today - rev_yday) * 100 / rev_yday) if rev_yday else None,
+        "week": week, "demand": demand,
+        "searches_today": SearchLog.objects.filter(created_at__gte=start).count(),
         "active_reservations": active,
         "new_orders": new_orders,
         "expiring": expiring,

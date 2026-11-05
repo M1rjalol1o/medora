@@ -35,6 +35,16 @@ export function probLevel(p) {
   return { cls: "danger", color: "var(--danger)" };
 }
 
+/** Ehtimol halqasi (conic-gradient). p: 0..1 */
+export function ring(p, size = "") {
+  const pct = Math.round((p || 0) * 100);
+  const HEX = { ok: "#0FB389", warn: "#F5A524", danger: "#FF5E57" };
+  const c = HEX[probLevel(p || 0).cls];
+  return `<div class="ring ${size}" style="background:conic-gradient(${c} ${pct * 3.6}deg, var(--surface-2) 0)"><span style="color:${c}">${pct}%</span></div>`;
+}
+
+export function initials(name) { return String(name || "?").trim().slice(0, 1).toUpperCase(); }
+
 export function countdown(iso) {
   const s = Math.max(0, Math.floor((new Date(iso) - Date.now()) / 1000));
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
@@ -50,7 +60,7 @@ export function applyTheme(mode = getTheme()) {
   if (mode === "system") document.documentElement.removeAttribute("data-theme");
   else document.documentElement.setAttribute("data-theme", mode);
   const dark = mode === "dark" || (mode === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#0B1220" : "#0FA37F");
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#0B1420" : "#0FB389");
 }
 
 export const loc = { lat: 41.3111, lng: 69.2797, demo: true };   // joriy joylashuv (umumiy)
@@ -75,6 +85,13 @@ export const icons = {
   store: P('<path d="M4 10v10h16V10M3 4h18l-1 6H4z"/><path d="M10 20v-5h4v5"/>'),
   clock: P('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   settings: P('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
+  bell: P('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>'),
+  scan: P('<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>'),
+  list: P('<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>'),
+  map: P('<path d="m9 4-6 2v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/>'),
+  gift: P('<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/>'),
+  camera: P('<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="4"/>'),
+  sparkle: P('<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 17l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/>'),
   chart: P('<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'),
 };
 export const ic = (name, size = 16) => icons[name].replace("<svg", `<svg style="width:${size}px;height:${size}px;vertical-align:-3px"`);

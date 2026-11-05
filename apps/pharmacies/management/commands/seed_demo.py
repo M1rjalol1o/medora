@@ -13,11 +13,12 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from apps.catalog.models import Medicine
+from apps.catalog.models import Medicine, SearchLog
+from apps.engage.models import Notification, StockWatch
 from apps.delivery.models import Delivery, Driver, TaxiPark
 from apps.orders.models import Order
 from apps.payments.models import PaymentCard
-from apps.prescriptions.models import MedicationCourse, Prescription
+from apps.prescriptions.models import FamilyMember, IntakeLog, MedicationCourse, Prescription
 from apps.pharmacies.models import Inventory, Pharmacy, SaleRecord
 from apps.reservations.models import Reservation
 
@@ -42,10 +43,10 @@ PHARMACIES = [
 
 # (nomi, MNN, shakli, dozasi, ishlab chiqaruvchi, retseptli, muqobil nomlar, mashhurlik)
 MEDICINES = [
-    ("Paratsetamol", "Paracetamol", "tabletka", "500 mg", "Demo Farm", False, "paracetamol, парацетамол, paratsetamol, panadol", 10),
-    ("Ibuprofen", "Ibuprofen", "tabletka", "400 mg", "Demo Farm", False, "ибупрофен, nurofen, нурофен", 8),
+    ("Paratsetamol", "Paracetamol", "tabletka", "500 mg", "Demo Farm", False, "paracetamol, парацетамол, paratsetamol", 10),
+    ("Ibuprofen", "Ibuprofen", "tabletka", "400 mg", "Demo Farm", False, "ибупрофен", 8),
     ("Sitramon", "Asetilsalitsil kislota + kofein", "tabletka", "", "Demo Farm", False, "цитрамон, citramon", 7),
-    ("Drotaverin", "Drotaverine", "tabletka", "40 mg", "Demo Farm", False, "дротаверин, no-shpa, но-шпа, noshpa", 7),
+    ("Drotaverin", "Drotaverine", "tabletka", "40 mg", "Demo Farm", False, "дротаверин", 7),
     ("Loratadin", "Loratadine", "tabletka", "10 mg", "Demo Farm", False, "лоратадин, allergiya", 5),
     ("Omeprazol", "Omeprazole", "kapsula", "20 mg", "Demo Farm", False, "омепразол, omez, омез", 5),
     ("Metamizol (Analgin)", "Metamizole", "tabletka", "500 mg", "Demo Farm", False, "analgin, анальгин, метамизол", 6),
@@ -58,13 +59,22 @@ MEDICINES = [
     ("Amlodipin", "Amlodipine", "tabletka", "5 mg", "Demo Farm", False, "амлодипин, bosim", 3),
     ("Lizinopril", "Lisinopril", "tabletka", "10 mg", "Demo Farm", False, "лизиноприл", 2),
     ("Metformin", "Metformin", "tabletka", "500 mg", "Demo Farm", False, "метформин, glyukofaj, qand", 3),
-    ("Setirizin", "Cetirizine", "tabletka", "10 mg", "Demo Farm", False, "цетиризин, zirtek", 3),
+    ("Setirizin", "Cetirizine", "tabletka", "10 mg", "Demo Farm", False, "цетиризин", 3),
     ("Ksilometazolin", "Xylometazoline", "burun spreyi", "0.1%", "Demo Farm", False, "ксилометазолин, burun tomchi", 4),
     ("Nimesulid", "Nimesulide", "kukun", "100 mg", "Demo Farm", False, "нимесулид, nise, найз", 4),
     ("Amoksitsillin", "Amoxicillin", "kapsula", "500 mg", "Demo Farm", True, "амоксициллин, antibiotik", 3),
     ("Azitromitsin", "Azithromycin", "tabletka", "500 mg", "Demo Farm", True, "азитромицин, sumamed", 2),
     ("Seftriakson", "Ceftriaxone", "ukol kukuni", "1 g", "Demo Farm", True, "цефтриаксон, ukol", 2),
+    # Brend dorilar: ta'sir qiluvchi moddasi (MNN) generik bilan bir xil, narxi ancha qimmat.
+    # Mijoz brendni qidirsa, ilova "Arzon muqobil" sifatida generikni taklif qiladi.
+    ("Nurofen", "Ibuprofen", "tabletka", "400 mg", "Brend (demo)", False, "нурофен, nurofen", 6),
+    ("Panadol", "Paracetamol", "tabletka", "500 mg", "Brend (demo)", False, "панадол, panadol", 6),
+    ("No-Shpa", "Drotaverine", "tabletka", "40 mg", "Brend (demo)", False, "но-шпа, ношпа, noshpa, no shpa", 5),
+    ("Zirtek", "Cetirizine", "tabletka", "10 mg", "Brend (demo)", False, "зиртек, zyrtec, zirtek", 3),
 ]
+# Brend -> generik narx koeffitsienti
+BRAND_OF = {"Nurofen": ("Ibuprofen", 2.3), "Panadol": ("Paratsetamol", 2.6), "No-Shpa": ("Drotaverin", 2.4),
+            "Zirtek": ("Setirizin", 2.2)}
 
 # Kun davomida xaridorlar taqsimoti (soat -> ulush)
 DAY_PROFILE = {h: w for h, w in zip(range(24), [
@@ -99,6 +109,10 @@ class Command(BaseCommand):
         PaymentCard.objects.all().delete()
         Prescription.objects.all().delete()
         MedicationCourse.objects.all().delete()
+        FamilyMember.objects.all().delete()
+        StockWatch.objects.all().delete()
+        Notification.objects.all().delete()
+        SearchLog.objects.all().delete()
         Driver.objects.all().delete()
         TaxiPark.objects.all().delete()
         SaleRecord.objects.all().delete()
@@ -125,12 +139,19 @@ class Command(BaseCommand):
         # Qoldiq
         today = timezone.localdate()
         inventories = []
+        bases = {}
+        for m, pop in meds:
+            if m.name in BRAND_OF:
+                gen, k = BRAND_OF[m.name]
+                bases[m.id] = int(bases[next(x.id for x, _ in meds if x.name == gen)] * k)
+            else:
+                bases[m.id] = {10: 4000, 8: 9000, 7: 6000}.get(pop, random.randint(8, 60) * 1000)
         for ph, traffic in pharmacies:
             for m, pop in meds:
                 if random.random() < 0.15:          # har dorixonada hamma dori bo'lmaydi
                     continue
                 qty = random.choice([0, 1, 2, 3, 5, 8, 12, 15, 20, 30, 40]) if random.random() < 0.9 else 0
-                base_price = {10: 4000, 8: 9000, 7: 6000}.get(pop, random.randint(8, 60) * 1000)
+                base_price = bases[m.id]
                 inventories.append(Inventory(
                     pharmacy=ph, medicine=m, quantity=qty,
                     price=int(base_price * random.uniform(0.85, 1.25) / 100) * 100,
@@ -160,10 +181,13 @@ class Command(BaseCommand):
                     daily = 40                                            # gavjum joy: soatiga ~2-3 dona
                 hours = range(24) if ph.is_24h else range(8, 22)
                 weight_sum = sum(DAY_PROFILE[h] for h in hours)
-                for d in range(opts["days"], 0, -1):
+                now_h = timezone.localtime().hour
+                for d in range(opts["days"], -1, -1):            # d=0 — bugun, hozirgi soatgacha
                     day = today - timedelta(days=d)
                     season = 1.2 if day.weekday() < 5 else 0.9
                     for h in hours:
+                        if d == 0 and h >= now_h:
+                            break
                         q = poisson(daily * season * DAY_PROFILE[h] / weight_sum)
                         if q:
                             records.append(SaleRecord(pharmacy=ph, medicine=m, date=day, hour=h, quantity=q))
@@ -191,7 +215,29 @@ class Command(BaseCommand):
                                      role=User.Role.TAXIPARK, taxi_park=park)
 
         # Foydalanuvchilar
-        User.objects.create_user("demo", password=PASSWORD, first_name="Demo mijoz", phone="+998 90 000-00-00")
+        demo = User.objects.create_user("demo", password=PASSWORD, first_name="Demo mijoz",
+                                        phone="+998 90 000-00-00", points=4800)
+        # Salomatlik: o'zi va onasi uchun dori jadvali, oxirgi kunlar qabul tarixi bilan
+        mom = FamilyMember.objects.create(user=demo, name="Onam", relation="ona", color="#FF8A65")
+        FamilyMember.objects.create(user=demo, name="Ali", relation="farzand", color="#7C5CFF")
+        c1 = MedicationCourse.objects.create(user=demo, medicine_name="Ibuprofen 400 mg", dose="1 tabletka",
+                                             times=["08:00", "14:00", "20:00"], start_date=today - timedelta(days=4),
+                                             end_date=today + timedelta(days=1))
+        c2 = MedicationCourse.objects.create(user=demo, member=mom, medicine_name="Amlodipin 5 mg", dose="1 tabletka",
+                                             times=["09:00", "21:00"], start_date=today - timedelta(days=10),
+                                             end_date=today + timedelta(days=20))
+        logs = []
+        for c in (c1, c2):
+            for k in range(1, 7):
+                d = today - timedelta(days=k)
+                if d < c.start_date:
+                    continue
+                for t in c.times:
+                    logs.append(IntakeLog(course=c, date=d, time=t,
+                                          status="taken" if random.random() < 0.88 else "skipped"))
+        IntakeLog.objects.bulk_create(logs)
+        # Bugungi qidiruvlar (dorixona panelidagi "talab" bloki uchun)
+        SearchLog.objects.bulk_create([SearchLog(medicine=m) for m, pop in meds for _ in range(pop * random.randint(1, 4))])
         for i, (ph, _) in enumerate(pharmacies, start=1):
             User.objects.create_user(f"dorixona{i}", password=PASSWORD, first_name=f"{ph.name} xodimi",
                                      role=User.Role.PHARMACY, pharmacy=ph)

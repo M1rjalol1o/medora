@@ -1,5 +1,5 @@
 """
-Medora — Django sozlamalari.
+Malhamix — Django sozlamalari.
 
 Muhit o'zgaruvchilari (ixtiyoriy):
   DJANGO_SECRET_KEY, DJANGO_DEBUG, DJANGO_ALLOWED_HOSTS
@@ -31,7 +31,7 @@ if not SECRET_KEY:
     SECRET_KEY = "dev-only-secret-change-me-in-production-0123456789"
 DEBUG = os.getenv("DJANGO_DEBUG", "0" if ON_VERCEL else "1") == "1"
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",")
-CSRF_TRUSTED_ORIGINS = ["https://*.vercel.app"] + [o for o in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if o]
+CSRF_TRUSTED_ORIGINS = ["https://*.vercel.app", "https://malhamix.uz", "https://www.malhamix.uz"] + [o for o in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if o]
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # Frontend (mobil ilova qobig'i) shu server orqali beriladi
 SERVE_FRONTEND = os.getenv("SERVE_FRONTEND", "1") == "1"
@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     "apps.payments",
     "apps.prescriptions",
     "apps.adminpanel",
+    "apps.engage",
 ]
 
 MIDDLEWARE = [
@@ -165,8 +166,8 @@ SIMPLE_JWT = {
 }
 
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Medora API",
-    "DESCRIPTION": "Medora: dori qidiruvi va qolish ehtimoli bashorati, bir nechta dorini birga qidirish, bron, "
+    "TITLE": "Malhamix API",
+    "DESCRIPTION": "Malhamix: dori qidiruvi va qolish ehtimoli bashorati, bir nechta dorini birga qidirish, bron, "
                    "savat va bitta to'lov, taksi orqali yetkazish, retsept o'qish, dori budilnigi, dorixona/taksopark/admin panellari. "
                    "Demo: demo/demo1234 (mijoz), dorixona1, driver1, park1 (parol demo1234). Avtorizatsiya: POST /api/auth/login/ -> Bearer token.",
     "VERSION": "1.0.0",
@@ -202,5 +203,8 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "google/gemma-4-31b-it:free")
 OCR_TIMEOUT_SECONDS = 60
+# Keshbek: buyurtma yakunlanganda dorilar summasining shu foizi ball bo'lib qaytadi (1 ball = 1 so'm)
+CASHBACK_PERCENT = 1
+POINTS_MAX_SHARE = 50                  # ballar bilan dorilar summasining ko'pi bilan shu foizini to'lash mumkin
 PREDICTION_HISTORY_DAYS = 28           # sotuv tezligi necha kunlik tarixdan hisoblanadi
 GUARANTEED_PROBABILITY = 0.9           # "kafolatli" deb hisoblanadigan chegara

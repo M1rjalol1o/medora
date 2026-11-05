@@ -101,7 +101,7 @@ def pay_order(request, pk):
             return Response({"detail": msg(request, "card_required")}, status=400)
         payment = order.payments.filter(status=Payment.Status.PENDING).first() or \
             Payment.objects.create(order=order, amount=order.total, method="card")
-        r = get_provider().charge(card.token, order.total, f"Medora buyurtma #{order.id}")
+        r = get_provider().charge(card.token, order.total, f"Malhamix buyurtma #{order.id}")
         if not r["ok"]:
             payment.status = Payment.Status.FAILED
             payment.card = card

@@ -2,19 +2,19 @@
 import { api } from "../api.js";
 import { cart } from "../cart.js";
 import { t } from "../i18n.js";
-import { esc, ic, loc, som, toast } from "../ui.js";
+import { esc, ic, icons, loc, som, toast } from "../ui.js";
 import { addCardFlow } from "./cards.js";
 
-const state = { fulfillment: "delivery", method: "card", cardId: null, address: "", rxId: null, comment: "" };
+const state = { fulfillment: "delivery", method: "card", cardId: null, address: "", rxId: null, comment: "", usePoints: false };
 
 export function render(root, { go }) {
   root.innerHTML = `<header class="topbar"><div><h1>${t("Savat")}</h1><div class="sub">${t("Bir nechta dorixona — bitta to'lov")}</div></div></header>
     <div class="screen" id="c"></div>`;
   const c = root.querySelector("#c");
-  let cards = [], rxList = [], quote = null, qTimer = null;
+  let cards = [], rxList = [], quote = null, qTimer = null, points = 0;
 
   async function loadSide() {
-    try { [cards, rxList] = await Promise.all([api("/payments/cards/"), api("/prescriptions/")]); } catch {}
+    try { let me; [cards, rxList, me] = await Promise.all([api("/payments/cards/"), api("/prescriptions/"), api("/auth/me/")]); points = me.points || 0; } catch {}
     if (!state.cardId && cards[0]) state.cardId = cards[0].id;
     draw();
   }
@@ -44,8 +44,9 @@ export function render(root, { go }) {
           <div class="bold">${ic("store", 15)} ${esc(g.name)}</div>
           ${g.items.map((i) => `
             <div class="list-row">
+              <div class="row start" style="min-width:0;gap:12px"><div class="ic tone-mint" style="width:42px;height:42px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex:none">${icons.pill.replace("<svg", '<svg style="width:20px;height:20px"')}</div>
               <div style="min-width:0"><div class="bold small">${esc(i.name)} ${esc(i.dosage)} ${i.rx ? '<span class="chip warn">Rx</span>' : ""}</div>
-                <div class="tiny muted">${som(i.price)}</div></div>
+                <div class="tiny muted">${som(i.price)}</div></div></div>
               <div class="qty"><button data-dec="${i.inventory_id}">−</button><b>${i.quantity}</b><button data-inc="${i.inventory_id}">+</button></div>
             </div>`).join("")}
         </div>`).join("")}
@@ -77,6 +78,10 @@ export function render(root, { go }) {
           <div><div class="bold small">${esc(k.brand)} ${esc(k.masked)}</div><div class="tiny muted">${esc(k.expiry)}</div></div></label>`).join("")}
           <button class="btn secondary sm" id="addCard">+ ${t("Karta qo'shish")}</button></div>` : ""}
 
+      ${points ? `<div class="card violet mt12"><div class="row">
+        <div class="row start" style="gap:12px"><div class="ic tone-violet" style="width:40px;height:40px;border-radius:13px;display:flex;align-items:center;justify-content:center;background:#fff">${icons.gift}</div>
+          <div><div class="bold small">${t("Ballar bilan to'lash")}</div><div class="tiny muted">${t("Sizda {n} ball · 1 ball = 1 so'm", { n: points.toLocaleString("ru-RU") })}</div></div></div>
+        <label class="switch"><input type="checkbox" id="usePts" ${state.usePoints ? "checked" : ""}><i></i></label></div></div>` : ""}
       <div class="card mt16" id="totals"><div class="spinner" style="margin:10px auto"></div></div>
       <button class="btn" id="checkout">${t("Buyurtma berish")}</button>
       <div style="height:10px"></div>`;
@@ -91,6 +96,7 @@ export function render(root, { go }) {
     c.querySelector("#addCard")?.addEventListener("click", async () => { const k = await addCardFlow(); cards.push(k); state.cardId = k.id; draw(); drawTotals(); });
     c.querySelector("#newRx")?.addEventListener("click", () => go("health", { upload: true }));
     c.querySelector("#checkout").onclick = checkout;
+    c.querySelector("#usePts")?.addEventListener("change", (e) => { state.usePoints = e.target.checked; drawTotals(); });
     drawTotals();
   }
 
@@ -98,12 +104,16 @@ export function render(root, { go }) {
     const el = c.querySelector("#totals");
     if (!el) return;
     if (!quote) { el.innerHTML = `<div class="spinner" style="margin:10px auto"></div>`; return; }
+    const pts = state.usePoints ? Math.min(points, Math.floor(quote.items_total * 0.5)) : 0;
+    const total = quote.total - pts;
     el.innerHTML = `
       <div class="row small"><span class="muted">${t("Dorilar")}</span><span>${som(quote.items_total)}</span></div>
       ${state.fulfillment === "delivery" ? `<div class="row small mt8"><span class="muted">${t("Yetkazish ({n} dorixona, {km} km)", { n: quote.pharmacies, km: quote.distance_km })}</span><span>${som(quote.delivery_fee)}</span></div>` : ""}
-      <div class="row mt12" style="font-size:18px"><b>${t("Jami")}</b><b>${som(quote.total)}</b></div>`;
+      ${pts ? `<div class="row small mt8" style="color:var(--violet)"><span>🎁 ${t("Ballar")}</span><b>−${som(pts)}</b></div>` : ""}
+      <div class="row mt12" style="font-size:18px"><b>${t("Jami")}</b><b>${som(total)}</b></div>
+      <div class="tiny muted mt8">✨ ${t("Buyurtma yakunlangach +{n} ball keshbek", { n: Math.floor((quote.items_total - pts) / 100) })}</div>`;
     const btn = c.querySelector("#checkout");
-    btn.textContent = state.method === "card" ? t("To'lash · {s}", { s: som(quote.total) }) : t("Buyurtma berish · {s}", { s: som(quote.total) });
+    btn.textContent = state.method === "card" ? t("To'lash · {s}", { s: som(total) }) : t("Buyurtma berish · {s}", { s: som(total) });
   }
 
   const schedQuote = () => { clearTimeout(qTimer); qTimer = setTimeout(requote, 200); };
@@ -117,7 +127,7 @@ export function render(root, { go }) {
       const order = await api("/orders/", { method: "POST", body: {
         items: cart.items.map((i) => ({ inventory_id: i.inventory_id, quantity: i.quantity })),
         fulfillment: state.fulfillment, payment_method: state.method, address: state.address,
-        lat: loc.lat, lng: loc.lng, prescription_id: state.rxId } });
+        lat: loc.lat, lng: loc.lng, prescription_id: state.rxId, use_points: state.usePoints } });
       if (state.method === "card") {
         try { await api(`/payments/orders/${order.id}/pay/`, { method: "POST", body: { card_id: state.cardId } }); }
         catch (err) { cart.clear(); toast(err.message, 4000); return go("orders", { order: order.id }); }

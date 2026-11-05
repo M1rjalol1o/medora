@@ -9,3 +9,7 @@ staticfiles/
 .env.local
 .vercel/
 media/
+
+# IDE
+.idea/
+.venv/

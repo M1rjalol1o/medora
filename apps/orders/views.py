@@ -50,7 +50,8 @@ def orders(request):
     try:
         order = services.create_order(
             request.user, d.get("items", []), fulfillment, method, address=d.get("address", ""),
-            lat=d.get("lat"), lng=d.get("lng"), prescription=rx, comment=d.get("comment", ""))
+            lat=d.get("lat"), lng=d.get("lng"), prescription=rx, comment=d.get("comment", ""),
+            use_points=bool(d.get("use_points")))
     except services.OrderError as e:
         return Response({"detail": msg(request, e.key, **e.kw)}, status=status.HTTP_409_CONFLICT)
     return Response(OrderSerializer(order_qs().get(pk=order.pk)).data, status=201)

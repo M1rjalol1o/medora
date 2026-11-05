@@ -63,7 +63,7 @@ class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = ("id", "status", "fulfillment", "payment_method", "is_paid", "payment_status", "address", "lat",
-                  "lng", "comment", "items_total", "delivery_fee", "total", "delivery_code", "created_at",
+                  "lng", "comment", "items_total", "delivery_fee", "points_used", "points_earned", "total", "delivery_code", "created_at",
                   "pharmacy_orders", "delivery", "prescription", "customer")
 
     def get_delivery(self, o):

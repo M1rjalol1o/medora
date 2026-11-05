@@ -1,7 +1,7 @@
 [project]
-name = "medora"
+name = "malhamix"
 version = "1.0.0"
-description = "Medora — dori qidiruvi, bashorat, yetkazish va retsept platformasi"
+description = "Malhamix — dori qidiruvi, bashorat, yetkazish va retsept platformasi"
 requires-python = ">=3.12"
 dependencies = [
   "Django>=5.0,<6.0",

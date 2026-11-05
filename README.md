@@ -1,4 +1,4 @@
-# Medora — dori topish, yetkazish va salomatlik platformasi
+# Malhamix — dori topish, yetkazish va salomatlik platformasi
 
 Bu platformada quyidagilar bitta ilovada ishlaydi:
 

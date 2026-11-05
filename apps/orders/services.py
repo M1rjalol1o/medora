@@ -67,7 +67,7 @@ def quote(items, fulfillment, lat, lng):
 
 @transaction.atomic
 def create_order(user, items, fulfillment, payment_method, address="", lat=None, lng=None,
-                 prescription=None, comment=""):
+                 prescription=None, comment="", use_points=False):
     from .models import Order, OrderItem, PharmacyOrder
     if not items:
         raise OrderError("empty_cart")
@@ -120,8 +120,19 @@ def create_order(user, items, fulfillment, payment_method, address="", lat=None,
         DeliveryStop.objects.create(delivery=delivery, sequence=len(route) + 1, kind="dropoff",
                                     title=user.first_name or user.username, address=address, lat=lat, lng=lng)
 
-    order.items_total, order.delivery_fee, order.total = items_total, fee, items_total + fee
-    order.save(update_fields=["items_total", "delivery_fee", "total"])
+    # Keshbek ballari bilan dorilar summasining bir qismini to'lash
+    points_used = 0
+    if use_points:
+        from apps.accounts.models import User
+        u = User.objects.select_for_update().get(pk=user.pk)
+        points_used = min(u.points, items_total * settings.POINTS_MAX_SHARE // 100)
+        if points_used:
+            u.points -= points_used
+            u.save(update_fields=["points"])
+            user.points = u.points
+    order.items_total, order.delivery_fee, order.points_used = items_total, fee, points_used
+    order.total = items_total + fee - points_used
+    order.save(update_fields=["items_total", "delivery_fee", "total", "points_used"])
     Payment.objects.create(order=order, amount=order.total, method=payment_method,
                            status=Payment.Status.PENDING if payment_method == "card" else Payment.Status.CASH_PENDING)
     return order
@@ -152,6 +163,11 @@ def cancel_order(order, reason_refund=True):
             po.save(update_fields=["status", "updated_at"])
     order.status = Order.Status.CANCELLED
     order.save(update_fields=["status"])
+    if order.points_used:                       # ishlatilgan ballar qaytariladi
+        from django.db.models import F
+
+        from apps.accounts.models import User
+        User.objects.filter(pk=order.user_id).update(points=F("points") + order.points_used)
     if hasattr(order, "delivery"):
         order.delivery.status = Delivery.Status.CANCELLED
         order.delivery.save(update_fields=["status"])
@@ -201,3 +217,7 @@ def sync_order_status(order):
     if new != order.status:
         order.status = new
         order.save(update_fields=["status"])
+        from apps.engage.services import award_cashback, notify
+        notify(order.user, "order_status", order_id=order.id, status=new)
+        if new == Order.Status.COMPLETED:
+            award_cashback(order)

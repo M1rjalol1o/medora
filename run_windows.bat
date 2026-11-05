@@ -1,5 +1,5 @@
 @echo off
-REM Medora — Windows uchun bir marta bosib ishga tushirish
+REM Malhamix — Windows uchun bir marta bosib ishga tushirish
 cd /d %~dp0
 if not exist .venv (
   echo Virtual muhit yaratilmoqda...

@@ -12,14 +12,17 @@ export function render(root, { onLogin }) {
   const draw = () => {
     root.innerHTML = `
     <div class="screen" style="padding-bottom:30px">
-      <div class="row" style="padding-top:14px;justify-content:flex-end">
-        <div class="lang-switch">${LANGS.map((l) => `<button data-lang="${l.code}" class="${l.code === currentLang() ? "active" : ""}">${l.code.toUpperCase()}</button>`).join("")}</div>
-      </div>
-      <div class="login-hero" style="padding-top:18px">
-        <div class="row" style="justify-content:flex-start;gap:12px"><div class="logo" style="color:var(--primary-ink)">${icons.pill}</div>
-          <div style="font-size:28px;font-weight:800;letter-spacing:-.5px">Medora</div></div>
+      <div class="login-hero">
+        <div class="row">
+          <div class="row start" style="gap:12px"><div class="logo">${icons.pill}</div>
+            <div style="font-size:26px;font-weight:800;letter-spacing:-.5px">Malhamix</div></div>
+          <div class="lang-switch">${LANGS.map((l) => `<button data-lang="${l.code}" class="${l.code === currentLang() ? "active" : ""}" style="background:rgba(255,255,255,${l.code === currentLang() ? ".95" : ".15"});color:${l.code === currentLang() ? "#0A7C92" : "#fff"};border:0">${l.code.toUpperCase()}</button>`).join("")}</div>
+        </div>
         <h1>${t("Dori toping — kafolat bilan")}</h1>
-        <div class="muted">${t("Yetib borguningizcha dori qoladimi? Ilova oldindan aytadi.")}</div>
+        <p>${t("Yetib borguningizcha dori qoladimi? Ilova oldindan aytadi.")}</p>
+        <div class="chips mt16"><span class="chip" style="background:rgba(255,255,255,.18);color:#fff">🤖 AI</span>
+          <span class="chip" style="background:rgba(255,255,255,.18);color:#fff">🚕 ${t("Yetkazish")}</span>
+          <span class="chip" style="background:rgba(255,255,255,.18);color:#fff">⏰ ${t("Budilnik")}</span></div>
       </div>
       <form id="f" class="mt16">
         ${mode === "register" ? `<label class="lbl">${t("Ismingiz")}</label><input class="input" name="first_name" required>

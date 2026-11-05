@@ -9,10 +9,11 @@ const state = { tab: "orders", openId: null };
 export function render(root, { go, params }) {
   if (params?.tab) state.tab = params.tab;
   if (params?.order) { state.tab = "orders"; state.openId = params.order; }
-  root.innerHTML = `<header class="topbar"><div><h1>${t("Buyurtmalar")}</h1></div></header>
+  root.innerHTML = `<header class="topbar"><div class="row start" style="gap:10px"><button class="icon-btn" id="back">←</button><h1>${t("Buyurtmalar")}</h1></div></header>
     <div class="screen"><div class="seg" id="seg"><button data-v="orders">${t("Buyurtmalar")}</button><button data-v="reservations">${t("Bronlar")}</button></div>
     <div id="c" class="mt12"><div class="spinner"></div></div></div>`;
   const c = root.querySelector("#c");
+  root.querySelector("#back").onclick = () => (state.openId ? (state.openId = null, load(true)) : go("home"));
   let mapCtl = null, lastKey = "";
 
   root.querySelectorAll("#seg button").forEach((b) => (b.onclick = () => { state.tab = b.dataset.v; state.openId = null; segs(); load(true); }));
@@ -97,7 +98,9 @@ export function render(root, { go, params }) {
       <div class="card">
         <div class="row small"><span class="muted">${t("Dorilar")}</span><span>${som(o.items_total)}</span></div>
         ${o.delivery_fee ? `<div class="row small mt8"><span class="muted">${t("Yetkazish")}</span><span>${som(o.delivery_fee)}</span></div>` : ""}
+        ${o.points_used ? `<div class="row small mt8" style="color:var(--violet)"><span>🎁 ${t("Ballar")}</span><span>−${som(o.points_used)}</span></div>` : ""}
         <div class="row mt12"><b>${t("Jami")}</b><b>${som(o.total)}</b></div>
+        ${o.points_earned ? `<div class="chip violet mt8">✨ +${o.points_earned} ${t("ball keshbek")}</div>` : ""}
         <div class="row tiny muted mt8"><span>${esc(st(o.payment_method))}</span><span>${esc(st(o.payment_status || ""))}</span></div>
       </div>
       ${canCancel ? `<button class="btn danger" id="cancel">${t("Buyurtmani bekor qilish")}</button>` : ""}`;

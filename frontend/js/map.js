@@ -33,14 +33,42 @@ export async function drawRouteMap(el, points, driver) {
     const map = L.map(el, { zoomControl: false, attributionControl: false });
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
     const ll = points.map((p) => [p.lat, p.lng]);
-    L.polyline(ll, { color: "#0FA37F", weight: 4, opacity: 0.8, dashArray: "6 8" }).addTo(map);
-    points.forEach((p) => L.marker([p.lat, p.lng], { icon: dot(L, p.color || "#0FA37F", p.label || "") }).addTo(map));
+    L.polyline(ll, { color: "#0FB389", weight: 4, opacity: 0.8, dashArray: "6 8" }).addTo(map);
+    points.forEach((p) => L.marker([p.lat, p.lng], { icon: dot(L, p.color || "#0FB389", p.label || "") }).addTo(map));
     let car = null;
     if (driver?.lat) { car = L.marker([driver.lat, driver.lng], { icon: dot(L, "#111827", "🚕") }).addTo(map); ll.push([driver.lat, driver.lng]); }
     map.fitBounds(ll, { padding: [30, 30] });
     return { map, moveDriver: (lat, lng) => car ? car.setLatLng([lat, lng]) : (car = L.marker([lat, lng], { icon: dot(L, "#111827", "🚕") }).addTo(map)) };
   } catch {
     el.style.display = "none";
+    return null;
+  }
+}
+
+/** Dorixonalar xaritasi: har bir pin ustida narx, rangi — qolish ehtimoli. pins: [{lat,lng,label,color,id}] */
+export async function drawPinsMap(el, pins, me, onPick) {
+  try {
+    const L = await loadLeaflet();
+    if (!el.isConnected) return null;
+    el.innerHTML = "";
+    const map = L.map(el, { zoomControl: false, attributionControl: false });
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
+    const ll = [];
+    if (me) {
+      L.marker([me.lat, me.lng], { icon: L.divIcon({ className: "", iconSize: [18, 18], iconAnchor: [9, 9],
+        html: `<div style="width:18px;height:18px;border-radius:50%;background:#2F80ED;border:3px solid #fff;box-shadow:0 0 0 6px rgba(47,128,237,.2)"></div>` }) }).addTo(map);
+      ll.push([me.lat, me.lng]);
+    }
+    pins.forEach((p) => {
+      const m = L.marker([p.lat, p.lng], { icon: L.divIcon({ className: "mp", iconSize: [0, 0],
+        html: `<div class="mpin"><b>${p.label}</b><i style="background:${p.color}"></i></div>` }) }).addTo(map);
+      m.on("click", () => onPick?.(p.id));
+      ll.push([p.lat, p.lng]);
+    });
+    if (ll.length) map.fitBounds(ll, { padding: [40, 40], maxZoom: 15 });
+    return map;
+  } catch {
+    el.innerHTML = `<div class="empty small">🗺</div>`;
     return null;
   }
 }

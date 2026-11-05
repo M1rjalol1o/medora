@@ -48,6 +48,21 @@ class Inventory(models.Model):
         unique_together = ("pharmacy", "medicine")
         verbose_name_plural = "inventory"
 
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        obj = super().from_db(db, field_names, values)
+        obj._orig_quantity = obj.quantity
+        return obj
+
+    def save(self, *args, **kwargs):
+        was_empty = getattr(self, "_orig_quantity", None) == 0
+        super().save(*args, **kwargs)
+        if was_empty and self.quantity > 0:
+            # "Paydo bo'lsa xabar ber" — kuzatayotganlarga bildirishnoma
+            from apps.engage.services import notify_back_in_stock
+            notify_back_in_stock(self)
+        self._orig_quantity = self.quantity
+
     def __str__(self):
         return f"{self.pharmacy} — {self.medicine}: {self.quantity}"
 

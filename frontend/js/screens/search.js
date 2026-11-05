@@ -2,9 +2,10 @@
 import { api } from "../api.js";
 import { cart } from "../cart.js";
 import { t } from "../i18n.js";
-import { closeSheet, esc, ic, icons, loc, mins, probLevel, sheet, som, toast } from "../ui.js";
+import { closeSheet, esc, ic, icons, loc, mins, probLevel, ring, sheet, som, toast } from "../ui.js";
+import { drawPinsMap } from "../map.js";
 
-const state = { query: "", medicine: null, result: null, mode: "normal", travel: "car", basket: [], view: "single", basketResult: null };
+const state = { query: "", medicine: null, result: null, mode: "normal", travel: "car", basket: [], view: "single", basketResult: null, layout: "list", only24: false, onlyStock: false };
 
 const KIND = {
   recommended: ["⭐", "Tavsiya etiladi"], all_in_one: ["🏥", "Hammasi bir joyda"],
@@ -12,6 +13,7 @@ const KIND = {
 };
 
 export function render(root, { go, params }) {
+  if (params?.urgent) state.mode = "urgent";
   if (params?.basket?.length) {
     state.basket = params.basket.map((b) => ({ ...b }));          // retseptdan — ro'yxat yangidan
     state.view = "basket"; state.basketResult = null;
@@ -19,7 +21,8 @@ export function render(root, { go, params }) {
   root.innerHTML = `
     <header class="topbar"><div><h1>${t("Dori toping")}</h1>
       <div class="sub" id="loc" style="cursor:pointer">${ic("pin", 13)} <span></span></div></div>
-      <div class="actions"><button class="icon-btn" id="toCart">${icons.cart}</button></div></header>
+      <div class="actions"><button class="icon-btn" id="toScan" title="${t("Retseptni skanerlash")}">${icons.scan}</button>
+        <button class="icon-btn" id="toCart">${icons.cart}</button></div></header>
     <div class="screen">
       <div class="search-box">${icons.search}<input class="input" id="q" placeholder="${t("Dori nomi: paratsetamol, нурофен...")}" autocomplete="off" value="${esc(state.query)}"></div>
       <div id="sug"></div>
@@ -46,6 +49,7 @@ export function render(root, { go, params }) {
   const unsub = cart.onChange(drawCartBadge);
   drawCartBadge();
   $("#toCart").onclick = () => go("cart");
+  $("#toScan").onclick = () => go("scan");
 
   const drawLoc = () => { $("#loc span").textContent = loc.demo ? t("Toshkent markazi (demo)") : t("Joriy joylashuvingiz"); };
   $("#loc").onclick = () => {
@@ -210,15 +214,59 @@ export function render(root, { go, params }) {
     const hint = state.mode === "urgent"
       ? `<div class="hint urgent mt12">🚨 ${t("Shoshilinch rejim: eng yaqini emas, eng kafolatli yo'l birinchi.")}</div>`
       : `<div class="hint mt12">⚡ ${t("Oddiy rejim: o'rtacha eng tez yo'l. Shoshilinch bo'lsa yuqoridagi tugmani bosing.")}</div>`;
-    out.innerHTML = `
-      <div class="row"><div><div class="bold" style="font-size:18px">${esc(medicine.name)} ${esc(medicine.dosage)}</div>
-        <div class="small muted">${esc(medicine.form)} · ${t("{n} ta dorixonada bor", { n: inStock.length })}</div></div>
-        ${medicine.requires_prescription ? `<span class="chip warn">${t("Retsept bilan")}</span>` : ""}</div>
-      <button class="btn sm secondary mt8" id="toBasket">+ ${t("Ro'yxatga qo'shish (bir nechta dori)")}</button>
-      ${hint}
-      <div class="mt12">${offers.map(card).join("") || `<div class="empty">${t("Hech qayerda yo'q")}</div>`}</div>`;
-    out.querySelector("#toBasket").onclick = () => addToBasket(medicine);
     const find = (id) => offers.find((o) => o.inventory_id == id);
+    const shown = offers.filter((o) => (!state.only24 || o.pharmacy.is_24h) && (!state.onlyStock || o.available > 0));
+    const alt = (state.result.alternatives || []).find((a) => a.cheaper);
+    out.innerHTML = `
+      <div class="row"><div class="grow"><div class="bold" style="font-size:19px;letter-spacing:-.3px">${esc(medicine.name)} ${esc(medicine.dosage)}</div>
+        <div class="small muted">${esc(medicine.form)} · ${t("{n} ta dorixonada bor", { n: inStock.length })}</div></div>
+        ${medicine.requires_prescription ? `<span class="chip warn">${t("Retsept bilan")}</span>` : ""}
+        <button class="icon-btn ${state.result.watching ? "on" : ""}" id="watch" title="${t("Paydo bo'lsa xabar ber")}">${icons.bell}</button></div>
+      ${alt ? `<div class="card violet mt12" style="margin-bottom:0">
+        <div class="row"><span class="chip violet">✨ ${t("Arzon muqobil")}</span>${alt.saving_percent ? `<span class="chip disc">−${alt.saving_percent}%</span>` : ""}</div>
+        <div class="row mt8"><div class="grow"><div class="bold">${esc(alt.medicine.name)} ${esc(alt.medicine.dosage)}</div>
+          <div class="tiny muted">${t("Ta'sir qiluvchi modda bir xil: {inn}", { inn: esc(alt.medicine.inn) })} · ${t("{n} ta dorixonada", { n: alt.pharmacies })}</div></div>
+          <div style="text-align:right"><div class="tiny muted">${t("dan")}</div><div class="price">${som(alt.min_price)}</div></div></div>
+        <button class="btn sm violet mt12" id="alt" style="width:100%">${t("Muqobilni ko'rish")}</button>
+        <div class="tiny muted mt8">${t("Almashtirishdan oldin shifokor yoki farmatsevt bilan maslahatlashing.")}</div></div>` : ""}
+      <div class="row mt12">
+        <div class="chips grow"><button class="chip ${state.only24 ? "on" : ""}" id="f24">🌙 24/7</button>
+          <button class="chip ${state.onlyStock ? "on" : ""}" id="fstock">✓ ${t("Faqat borlari")}</button>
+          <button class="chip" id="toBasket">+ ${t("Ro'yxatga")}</button></div>
+        <div class="seg" style="flex:none"><button data-l="list" class="${state.layout === "list" ? "active" : ""}">${ic("list", 15)}</button>
+          <button data-l="map" class="${state.layout === "map" ? "active" : ""}">${ic("map", 15)}</button></div></div>
+      ${hint}
+      ${state.layout === "map" ? `<div class="map tall mt12" id="pmap"><div class="spinner"></div></div><div id="picked"></div>`
+        : `<div class="mt12">${shown.map(card).join("") || `<div class="empty">${t("Hech qayerda yo'q")}</div>`}</div>`}`;
+    out.querySelector("#toBasket").onclick = () => addToBasket(medicine);
+    out.querySelector("#f24").onclick = () => { state.only24 = !state.only24; drawResults(); };
+    out.querySelector("#fstock").onclick = () => { state.onlyStock = !state.onlyStock; drawResults(); };
+    out.querySelectorAll("[data-l]").forEach((b) => (b.onclick = () => { state.layout = b.dataset.l; drawResults(); }));
+    out.querySelector("#watch").onclick = async () => {
+      try {
+        if (state.result.watching) { await api(`/watches/${medicine.id}/`, { method: "DELETE" }); state.result.watching = false; toast(t("Kuzatish o'chirildi")); }
+        else { await api("/watches/", { method: "POST", body: { medicine_id: medicine.id } }); state.result.watching = true; toast(t("Dori paydo bo'lsa xabar beramiz 🔔")); }
+        drawResults();
+      } catch (e) { toast(e.message); }
+    };
+    if (alt) out.querySelector("#alt").onclick = () => {
+      state.medicine = alt.medicine; state.query = alt.medicine.name; input.value = alt.medicine.name; refresh();
+    };
+    if (state.layout === "map") {
+      const HEX = { ok: "#0FB389", warn: "#F5A524", danger: "#FF5E57" };
+      const pick = (id) => { $("#picked").innerHTML = card(find(id)); bind($("#picked"), find); };
+      drawPinsMap($("#pmap"), shown.filter((o) => o.available > 0).map((o) => ({
+        id: o.inventory_id, lat: o.pharmacy.lat, lng: o.pharmacy.lng, label: som(o.price), color: HEX[probLevel(o.probability).cls],
+      })), loc, pick);
+      const rec = shown.find((o) => o.recommended && o.available > 0) || shown.find((o) => o.available > 0);
+      if (rec) pick(rec.inventory_id);
+      return;
+    }
+    bind(out, find);
+  }
+
+  function bind(out, find) {
+    const medicine = state.result.medicine;
     out.querySelectorAll("[data-reserve]").forEach((b) => (b.onclick = () => openReserve(find(b.dataset.reserve))));
     out.querySelectorAll("[data-cart]").forEach((b) => (b.onclick = () => {
       cart.add(find(b.dataset.cart), medicine);
@@ -251,8 +299,10 @@ export function render(root, { go, params }) {
         ${!ph.is_open ? `<span class="chip danger">${t("Yopiq")}</span>` : ph.is_24h ? '<span class="chip">24/7</span>' : ""}
       </div>
       ${out ? "" : `
-      <div class="row mt12 small"><span>${t("Yetib borguningizcha qolish ehtimoli")}</span><b style="color:${lv.color}">${pct}%</b></div>
-      <div class="prob"><i style="width:${Math.max(pct, 3)}%;background:${lv.color}"></i></div>
+      <div class="row mt12" style="background:var(--surface-2);border-radius:16px;padding:10px 12px">
+        ${ring(o.probability)}
+        <div class="grow small"><b>${t("Yetib borguningizcha qolish ehtimoli")}</b>
+          <div class="tiny muted mt4">${t("AI bashorat · soatiga ~{n} dona sotiladi", { n: o.sales_per_hour })}</div></div></div>
       ${!o.guaranteed ? `<div class="tiny muted mt8">⚠ ${t("Topilmasa jami ~{m} ketadi.", { m: mins(o.worst_case_minutes) })} <b>${t("Bron qilsangiz, xavf yo'q.")}</b></div>` : ""}
       <div class="btn-row mt12">
         <button class="btn sm" data-cart="${o.inventory_id}" ${!ph.is_open ? "disabled" : ""}>${ic("cart", 15)} ${t("Savatga")}</button>

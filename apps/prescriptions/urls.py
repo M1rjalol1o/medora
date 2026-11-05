@@ -7,6 +7,9 @@ urlpatterns = [
     path("prescriptions/<int:pk>/", views.prescription_detail),
     path("prescriptions/<int:pk>/confirm/", views.prescription_confirm),
     path("courses/", views.courses),
+    path("family/", views.family),
+    path("family/<int:pk>/", views.family_detail),
+    path("health/stats/", views.health_stats),
     path("courses/<int:pk>/", views.course_detail),
     path("courses/<int:pk>/log/", views.course_log),
 ]

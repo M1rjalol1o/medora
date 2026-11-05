@@ -15,6 +15,7 @@ class User(AbstractUser):
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.CUSTOMER)
     phone = models.CharField(max_length=20, blank=True)
     language = models.CharField(max_length=5, default="uz")          # uz / ru / en
+    points = models.PositiveIntegerField(default=0)                  # keshbek ballari (1 ball = 1 so'm)
     pharmacy = models.ForeignKey(
         "pharmacies.Pharmacy", null=True, blank=True, on_delete=models.SET_NULL, related_name="staff"
     )
