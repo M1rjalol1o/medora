@@ -34,6 +34,23 @@ Keyin brauzerda **http://127.0.0.1:8000** ni oching.
 
 API hujjati: http://127.0.0.1:8000/api/docs/ · Django admin: http://127.0.0.1:8000/admin/ · Testlar: `python manage.py test apps`
 
+
+## Docker bilan ishga tushirish
+
+```bash
+docker compose up --build
+```
+
+- Sayt: http://localhost:8000
+- Swagger: http://localhost:8000/api/docs/
+- Postgres konteyneri avtomatik ko'tariladi. Birinchi ishga tushishda migratsiya va demo ma'lumot yuklanadi.
+- Maxfiy qiymatlarni `.env` faylida yoki muhit o'zgaruvchisi sifatida bering: `DJANGO_SECRET_KEY`, `ADMIN_PASSWORD`, `GEMINI_API_KEY`.
+
+## Texnologiyalar
+
+Django 5 · Django REST Framework · JWT (simplejwt) · drf-spectacular (Swagger) · PostgreSQL · Docker · Vercel
+
+
 ## Asosiy qoidalar
 
 **Bron muddati** = mijozning dorixonagacha **piyoda yo'l vaqti + 20 daqiqa**. Eng ko'pi 4 soat. Sozlamasi: `settings.RESERVATION_*`.

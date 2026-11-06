@@ -1,0 +1,35 @@
+# Ishga tushirish:  docker compose up --build
+# Sayt:     http://localhost:8000
+# Swagger:  http://localhost:8000/api/docs/
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: malhamix
+      POSTGRES_USER: malhamix
+      POSTGRES_PASSWORD: malhamix
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U malhamix -d malhamix"]
+      interval: 3s
+      retries: 20
+
+  web:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://malhamix:malhamix@db:5432/malhamix?sslmode=disable
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-in-production-please}
+      DJANGO_DEBUG: "0"
+      DJANGO_ALLOWED_HOSTS: "*"
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin1234}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      SEED_DAYS: "14"
+
+volumes:
+  pgdata:
